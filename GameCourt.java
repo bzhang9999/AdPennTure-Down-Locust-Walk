@@ -1,136 +1,223 @@
-/**
- * CIS 120 Game HW
- * (c) University of Pennsylvania
- * @version 2.1, Apr 2017
- */
-
 import java.awt.*;
 import java.awt.event.*;
+import java.io.BufferedWriter;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.text.SimpleDateFormat;
+import java.util.Calendar;
 import javax.swing.*;
 
 /**
  * GameCourt
  * 
- * This class holds the primary game logic for how different objects interact with one another. Take
- * time to understand how the timer interacts with the different methods and how it repaints the GUI
- * on every tick().
+ * This class holds the primary game logic for how different objects interact
+ * with one another. 
  */
 @SuppressWarnings("serial")
 public class GameCourt extends JPanel {
 
-    // the state of the game logic
-    private Square square; // the Black Square, keyboard control
-    private Circle snitch; // the Golden Snitch, bounces
-    private Poison poison; // the Poison Mushroom, doesn't move
+	// the state of the game logic
+	private StartMenu menu;
+	private Shooter penn;
+	private ProjectileController c;
+	private StageOne stageOne;
+	private StageTwo stageTwo;
+	private StageThree stageThree;
+	private StageFour stageFour;
+	private StageFive stageFive;
+	private JLabel lives;
+	private JLabel score;
+	private JLabel name;
+	public static String username;
 
-    public boolean playing = false; // whether the game is running 
-    private JLabel status; // Current status text, i.e. "Running..."
+	public static boolean playing = false; // whether the game is running
+	public static int highscore = 0;
+	private JLabel status; // Current status text, i.e. "Running..."
 
-    // Game constants
-    public static final int COURT_WIDTH = 300;
-    public static final int COURT_HEIGHT = 300;
-    public static final int SQUARE_VELOCITY = 4;
+	// Game constants
+	public static final int COURT_WIDTH = 600;
+	public static final int COURT_HEIGHT = 600;
+	public static final int PENN_VELOCITY = 8;
 
-    // Update interval for timer, in milliseconds
-    public static final int INTERVAL = 35;
+	// Update interval for timer, in milliseconds
+	public static final int INTERVAL = 35;
 
-    public GameCourt(JLabel status) {
-        // creates border around the court area, JComponent method
-        setBorder(BorderFactory.createLineBorder(Color.BLACK));
+	public GameCourt(JLabel status, JLabel lives, JLabel score, JLabel name) {
+		// creates border around the court area, JComponent method
+		setBorder(BorderFactory.createLineBorder(Color.BLACK));
 
-        // The timer is an object which triggers an action periodically with the given INTERVAL. We
-        // register an ActionListener with this timer, whose actionPerformed() method is called each
-        // time the timer triggers. We define a helper method called tick() that actually does
-        // everything that should be done in a single timestep.
-        Timer timer = new Timer(INTERVAL, new ActionListener() {
-            public void actionPerformed(ActionEvent e) {
-                tick();
-            }
-        });
-        timer.start(); // MAKE SURE TO START THE TIMER!
+		Timer timer = new Timer(INTERVAL, new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				tick();
+			}
+		});
+		timer.start();
 
-        // Enable keyboard focus on the court area.
-        // When this component has the keyboard focus, key events are handled by its key listener.
-        setFocusable(true);
+		// Enable keyboard focus on the court area.
+		setFocusable(true);
+		
+		addKeyListener(new KeyAdapter() {
+			public void keyPressed(KeyEvent e) {
+				if (e.getKeyCode() == KeyEvent.VK_LEFT) {
+					penn.setVx(-PENN_VELOCITY);
+				} else if (e.getKeyCode() == KeyEvent.VK_RIGHT) {
+					penn.setVx(PENN_VELOCITY);
+				} else if (e.getKeyCode() == KeyEvent.VK_SPACE) {
+					c.add(new Projectile(0, -10, penn.getPx(), penn.getPy(), 20, 20, COURT_WIDTH, COURT_HEIGHT));
+				}
+			}
 
-        // This key listener allows the square to move as long as an arrow key is pressed, by
-        // changing the square's velocity accordingly. (The tick method below actually moves the
-        // square.)
-        addKeyListener(new KeyAdapter() {
-            public void keyPressed(KeyEvent e) {
-                if (e.getKeyCode() == KeyEvent.VK_LEFT) {
-                    square.setVx(-SQUARE_VELOCITY);
-                } else if (e.getKeyCode() == KeyEvent.VK_RIGHT) {
-                    square.setVx(SQUARE_VELOCITY);
-                } else if (e.getKeyCode() == KeyEvent.VK_DOWN) {
-                    square.setVy(SQUARE_VELOCITY);
-                } else if (e.getKeyCode() == KeyEvent.VK_UP) {
-                    square.setVy(-SQUARE_VELOCITY);
-                }
-            }
+			public void keyReleased(KeyEvent e) {
+				penn.setVx(0);
+				penn.setVy(0);
+			}
+		});
+		username = "";
+		menu = new StartMenu();
+		this.addMouseListener(menu);
+		this.status = status;
+		this.lives = lives;
+		this.score = score;
+		this.name = name;
+	}
 
-            public void keyReleased(KeyEvent e) {
-                square.setVx(0);
-                square.setVy(0);
-            }
-        });
+	/**
+	 * (Re-)set the game to its initial state.
+	 */
+	public void reset() {
+		if (!username.equals("")) {
+			writeHighScore();
+		}
+		lives.setText("Lives = 10");
+		penn = new Shooter(COURT_WIDTH, COURT_HEIGHT);
+		c = new ProjectileController();
+		stageOne = new StageOne();
+		stageTwo = new StageTwo();
+		stageThree = new StageThree();
+		stageFour = new StageFour();
+		stageFive = new StageFive();
+		playing = false;
+		status.setText("Running...");
+		score.setText("Scores = 0");
+		name.setText("Username = ");
+		highscore = 0;
+		repaint();
+		requestFocusInWindow();
+	}
 
-        this.status = status;
-    }
+	/**
+	 * Writes the scores, username, and date into a file after the game ends.
+	 * This method is called when the reset button is hit.  
+	 */
+	private void writeHighScore() {
+		String timeStamp = new SimpleDateFormat("M-d-y H:m:s").format(Calendar.getInstance().getTime());
+		BufferedWriter wr = null;
+		try {
+			HighScore score = new HighScore(username, timeStamp, highscore + penn.getHealth());
+			wr = new BufferedWriter(new FileWriter(StartMenu.highscoreFile, true));
+			wr.append((score.getUsername() + "||" + score.getDate() + "||" + score.getHighScore() + "\n"));
+		} catch (IOException e) {
+			e.printStackTrace();
+		} finally {
+			try {
+				wr.close();
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		}
+	}
 
-    /**
-     * (Re-)set the game to its initial state.
-     */
-    public void reset() {
-        square = new Square(COURT_WIDTH, COURT_HEIGHT, Color.BLACK);
-        poison = new Poison(COURT_WIDTH, COURT_HEIGHT);
-        snitch = new Circle(COURT_WIDTH, COURT_HEIGHT, Color.YELLOW);
+	/**
+	 * This method is called every time the timer defined in the constructor
+	 * triggers. Checks all end game/end level conditions and facilitates the transition 
+	 * between levels
+	 */
+	void tick() {
+		if (playing) {
+			name.setText("Username = " + username);
+			score.setText("Score = " + (highscore + penn.getHealth()));
+			penn.move();
+			if (!stageOne.isComplete()) {
+				stageOne.tick();
+				if (stageOne.hasReachedBottom()) {
+					updateHealth();
+				}
+			}
+			if (stageOne.isComplete() && penn.getHealth() != 0) {
+				stageTwo.tick();
+				if (stageTwo.hasReachedBottom()) {
+					updateHealth();
+				}
+			}
+			if (stageTwo.isComplete() && penn.getHealth() != 0) {
+				stageThree.tick();
+				if (stageThree.hasReachedBottom()) {
+					updateHealth();
+				}
+			}
+			if (stageThree.isComplete() && penn.getHealth() != 0) {
+				stageFour.tick();
+				if (stageFour.hasReachedBottom()) {
+					updateHealth();
+				}
+			}
+			if (stageFour.isComplete() && penn.getHealth() != 0) {
+				stageFive.tick();
+				if (stageFive.hasReachedBottom()) {
+					updateHealth();
+				}
+			}
+			if (penn.isDead()) {
+				playing = false;
+				status.setText("You lose!");
+				score.setText("Score = " + (highscore + penn.getHealth()));
+			}
+			if (stageFive.isComplete()) {
+				playing = false;
+				status.setText("YOU WIN!!!");
+			}
+			repaint();
+		}
+	}
 
-        playing = true;
-        status.setText("Running...");
+	/**
+	 * Updates the health of the shooter and also sets the 
+	 * lives to the appropriate number 
+	 */
+	private void updateHealth() {
+		penn.decHealth();
+		lives.setText("Lives = " + penn.getHealth());
+	}
 
-        // Make sure that this component has the keyboard focus
-        requestFocusInWindow();
-    }
+	@Override
+	public void paintComponent(Graphics g) {
+		super.paintComponent(g);
+		// only display at beginning
+		if (!playing && penn.getHealth() != 0 && !stageFive.isComplete()) {
+			menu.draw(g);
+		} else {
+			if (!stageOne.isComplete()) {
+				stageOne.draw(g);
+			}
+			if (stageOne.isComplete()) {
+				stageTwo.draw(g);
+			}
+			if (stageTwo.isComplete()) {
+				stageThree.draw(g);
+			}
+			if (stageThree.isComplete()) {
+				stageFour.draw(g);
+			}
+			if (stageFour.isComplete()) {
+				stageFive.draw(g);
+			}
+			penn.draw(g);
+			c.draw(g);
+		}
+	}
 
-    /**
-     * This method is called every time the timer defined in the constructor triggers.
-     */
-    void tick() {
-        if (playing) {
-            // advance the square and snitch in their current direction.
-            square.move();
-            snitch.move();
-
-            // make the snitch bounce off walls...
-            snitch.bounce(snitch.hitWall());
-            // ...and the mushroom
-            snitch.bounce(snitch.hitObj(poison));
-
-            // check for the game end conditions
-            if (square.intersects(poison)) {
-                playing = false;
-                status.setText("You lose!");
-            } else if (square.intersects(snitch)) {
-                playing = false;
-                status.setText("You win!");
-            }
-
-            // update the display
-            repaint();
-        }
-    }
-
-    @Override
-    public void paintComponent(Graphics g) {
-        super.paintComponent(g);
-        square.draw(g);
-        poison.draw(g);
-        snitch.draw(g);
-    }
-
-    @Override
-    public Dimension getPreferredSize() {
-        return new Dimension(COURT_WIDTH, COURT_HEIGHT);
-    }
+	@Override
+	public Dimension getPreferredSize() {
+		return new Dimension(COURT_WIDTH, COURT_HEIGHT);
+	}
 }
